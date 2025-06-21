@@ -198,9 +198,9 @@ export function bruteForce(charts: Array<Chart>, list: Array<cardInfo>, areaItem
                 const scoreUp = team.map(info => {
                     if (info.scoreUp.unificationActivateEffectValue) {
                         if (info.scoreUp.unificationActivateConditionBandId && info.scoreUp.unificationActivateConditionBandId != bandId)
-                            return info.scoreUp.default
+                            return info.scoreUp.default || 1.45 // 针对 155P 的修复
                         if (info.scoreUp.unificationActivateConditionType && info.scoreUp.unificationActivateConditionType.toLocaleLowerCase() != attribute)
-                            return info.scoreUp.default
+                            return info.scoreUp.default || 1.45 // 针对 155P 的修复
                         // console.log(info.scoreUp.unificationActivateConditionType, attribute)
                         return info.scoreUp.unificationActivateEffectValue
                     }
