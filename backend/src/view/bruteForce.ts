@@ -141,7 +141,7 @@ export class cardInfo{
     }
 }
 export class teamInfo{
-    set: number
+    set: bigint
     stat: number
     baseStat: number
     team: Array<cardInfo>
@@ -152,7 +152,7 @@ export class teamInfo{
     scoreUp: Array<Array<number> >
     meta: Array<number>
     constructor() {
-        this.set = 0
+        this.set = 0n
         this.stat = 0
         this.baseStat = 0
         this.team = []
@@ -196,7 +196,7 @@ export function bruteForce(charts: Array<Chart>, cardList: Array<cardInfo>, area
         return true
     }
 
-    function initTeamList(depth: number = 0, Set: number = 0, team: Array<cardInfo> = []) {
+    function initTeamList(depth: number = 0, Set: bigint = 0n, team: Array<cardInfo> = []) {
         if (depth == 5) {
             if (checkCharacter(team)) {
                 const info = new teamInfo()
@@ -236,10 +236,10 @@ export function bruteForce(charts: Array<Chart>, cardList: Array<cardInfo>, area
             return
         }
         for (var i = 0; i < cardList.length; i += 1) {
-            if (Set >> i & 1) {
+            if (Set >> BigInt(i) & 1n) {
                 break
             }
-            initTeamList(depth + 1, Set | 1 << i, [cardList[i], ...team])
+            initTeamList(depth + 1, Set | 1n << BigInt(i), [cardList[i], ...team])
         }
     }
     var data: calcResult = {
@@ -313,11 +313,11 @@ export function bruteForce(charts: Array<Chart>, cardList: Array<cardInfo>, area
 
         // 每张卡的综合力从大到小排序，用于剪枝
         const cardListStat = cardList.map((info, i) => {
-            return { stat: info.addUpStat, set: 1 << i }
+            return { stat: info.addUpStat, set: 1n << BigInt(i) }
         })
         cardListStat.sort((a, b) => { return b.stat - a.stat })
 
-        let abortSet = 0
+        let abortSet = 0n
         for (let i = 0; i < cardList.length; i++) {
             if (bandId == cardList[i].card.cardId.toString() || attribute == cardList[i].card.attribute) {
                 continue
@@ -329,13 +329,13 @@ export function bruteForce(charts: Array<Chart>, cardList: Array<cardInfo>, area
                     cnt += 1
             }
             if (cnt >= 5 * charts.length)
-                abortSet |= 1 << i
+                abortSet |= 1n << BigInt(i)
         }
         // console.log(cardList.map(info => info.stat))
         // console.log(cardList.map(info => info.scoreUp.default))
         // console.log(abortSet)
 
-        const tmpTeamList = teamList.filter(info => (info.set & abortSet) == 0)
+        const tmpTeamList = teamList.filter(info => (info.set & abortSet) == 0n)
 
         for (const info of tmpTeamList) {
             info.calcStat()
@@ -365,7 +365,7 @@ export function bruteForce(charts: Array<Chart>, cardList: Array<cardInfo>, area
         })
         // console.log(tmpTeamList.length)
         var cnt = 0
-        function dfs(depth: number = 0, Set: number = 0, sumScore: number = 0, teamList: Array<teamInfo> = []) {
+        function dfs(depth: number = 0, Set: bigint = 0n, sumScore: number = 0, teamList: Array<teamInfo> = []) {
             if (depth == 1) {
                 const timeNow = Date.now()
                 if (timeNow - timeStart > 1200000) {
