@@ -21,7 +21,7 @@ import { Skill } from '@/types/Skill';
 import { bruteForce, teamInfo, cardInfo } from './bruteForce';
 import { compositionResultDB } from '@/database/compositionResultDB';
 const resultDB = new compositionResultDB(process.env.MONGODB_URI ?? 'mongodb://localhost:27017/', 'tsugu-bangdream-bot')
-export const limit = 31
+export const limit = 101
 export async function drawCalcResult(player: playerDetail, server: Server, useEasyBG: boolean, compress: boolean, save: boolean, description?: string) {
     const event = new Event(player.currentEvent)
     if (!event.isExist) {
@@ -77,6 +77,7 @@ export async function drawCalcResult(player: playerDetail, server: Server, useEa
         calcResult = bruteForce(charts, cardList, player.getAreaItemPercent(), '')
     }
     catch(e) {
+        console.log(e)
         return ['计算超时，尝试减少角色数量']
     }
     const data: calcResult = {songList, description, ...calcResult}

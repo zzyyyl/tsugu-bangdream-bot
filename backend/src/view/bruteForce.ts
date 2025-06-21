@@ -143,8 +143,10 @@ export class cardInfo{
 export class teamInfo{
     set: number
     stat: number
+    baseStat: number
     team: Array<cardInfo>
     score: Array<number>
+    scoreRate: Array<number>
     order: Array<Array<cardInfo>>
     capital: Array<cardInfo>
     scoreUp: Array<Array<number> >
@@ -152,12 +154,27 @@ export class teamInfo{
     constructor() {
         this.set = 0
         this.stat = 0
+        this.baseStat = 0
         this.team = []
         this.score = []
+        this.scoreRate = []
         this.order = []
         this.capital = []
         this.scoreUp = []
         this.meta = []
+    }
+    calcBaseStat() {
+        this.baseStat = 0
+        let tmpStat: Stat = {
+            performance: 0,
+            technique: 0,
+            visual: 0
+        }
+        for (const { stat, eventAddStat } of this.team) {
+            addStat(tmpStat, stat)
+            addStat(tmpStat, eventAddStat)
+        }
+        this.baseStat = statSum(tmpStat)
     }
     calcStat() {
         this.stat = 0
@@ -167,11 +184,11 @@ export class teamInfo{
     }
 }
 
-export function bruteForce(charts: Array<Chart>, list: Array<cardInfo>, areaItem, type: string) {
+export function bruteForce(charts: Array<Chart>, cardList: Array<cardInfo>, areaItem, type: string) {
 
-    function checkCharacter(list: Array<cardInfo>) {
+    function checkCharacter(team: Array<cardInfo>) {
         const characterSet = new Set()
-        for (const info of list) {
+        for (const info of team) {
             if (characterSet.has(info.card.characterId))
                 return false
             characterSet.add(info.card.characterId)
@@ -218,11 +235,11 @@ export function bruteForce(charts: Array<Chart>, list: Array<cardInfo>, areaItem
             }
             return
         }
-        for (var i = 0; i < list.length; i += 1) {
+        for (var i = 0; i < cardList.length; i += 1) {
             if (Set >> i & 1) {
                 break
             }
-            initTeamList(depth + 1, Set | 1 << i, [list[i], ...team])
+            initTeamList(depth + 1, Set | 1 << i, [cardList[i], ...team])
         }
     }
     var data: calcResult = {
@@ -238,112 +255,210 @@ export function bruteForce(charts: Array<Chart>, list: Array<cardInfo>, areaItem
     const teamList: Array<teamInfo> = []
     initTeamList()
     console.log(teamList.length)
-    // let time1 = 0, time2 = 0
-    const timeStart = Date.now()
+
+    // 找到综合力最高的队伍，优先计算其对应基建时的配队
+    for (const info of teamList) {
+        info.calcBaseStat()
+    }
+    teamList.sort((a, b) => {
+        return b.baseStat - a.baseStat
+    })
+    const bestTeam = teamList[0]
+    let bestTeamStat = 0
+    let bestTeamMagazine = 'performance'
+    let bestTeamBandId = '1000'
+    let bestTeamAttribute = '~all'
+
     for (var magazine in areaItem[AreaItemType.magazine]) {
         for (var bandId in areaItem[AreaItemType.band]) {
             for (var attribute in areaItem[AreaItemType.attribute]) {
-                const maxScore = Array.from({ length: charts.length }, () => 0)
-                // const st = Date.now()
-                for (const info of list) {
+                for (const info of cardList) {
                     info.calcStat(areaItem, bandId, attribute, magazine)
                 }
-                for (const info of teamList) {
-                    info.calcStat()
-                    info.score = charts.map((chart, i) => {
-                        const score = chart.getScore([...info.order[i], info.capital[i]], info.scoreUp[i], Math.floor(info.stat))
-                        if (maxScore[i] < score)
-                            maxScore[i] = score
-                        return score
-                    })
+                bestTeam.calcStat()
+                if (bestTeamStat < bestTeam.stat) {
+                    bestTeamStat = bestTeam.stat
+                    bestTeamMagazine = magazine
+                    bestTeamBandId = bandId
+                    bestTeamAttribute = attribute
                 }
-                let abortSet = 0
-                for (let i = 0; i < list.length; i++) {
-                    if (bandId == list[i].card.cardId.toString() || attribute == list[i].card.attribute) {
+            }
+        }
+    }
+    // console.log("max team base stat:", bestTeam.baseStat)
+    // console.log("max team stat:", bestTeamStat)
+    // console.log("max team magazine:", bestTeamMagazine)
+    // console.log("max team bandId:", bestTeamBandId)
+    // console.log("max team attribute:", bestTeamAttribute)
+
+    const maxScoreRate = Array.from({ length: charts.length }, () => 0)
+    for (const info of teamList) {
+        info.scoreRate = charts.map((chart, i) => {
+            const scoreRate = chart.getScore([...info.order[i], info.capital[i]], info.scoreUp[i], 500000) / 500000
+            if (maxScoreRate[i] < scoreRate)
+                maxScoreRate[i] = scoreRate
+            return scoreRate
+        })
+    }
+
+    // let time1 = 0, time2 = 0
+    const timeStart = Date.now()
+
+    function main_process(magazine, bandId, attribute) {
+        const maxScore = Array.from({ length: charts.length }, () => 0)
+        // const st = Date.now()
+        for (const info of cardList) {
+            info.calcStat(areaItem, bandId, attribute, magazine)
+        }
+
+        // 每张卡的综合力从大到小排序，用于剪枝
+        const cardListStat = cardList.map((info, i) => {
+            return { stat: info.addUpStat, set: 1 << i }
+        })
+        cardListStat.sort((a, b) => { return b.stat - a.stat })
+
+        let abortSet = 0
+        for (let i = 0; i < cardList.length; i++) {
+            if (bandId == cardList[i].card.cardId.toString() || attribute == cardList[i].card.attribute) {
+                continue
+            }
+
+            let cnt = 0, scoreUpMaxValue = cardList[i].scoreUp.unificationActivateEffectValue || cardList[i].scoreUp.default
+            for (const info of cardList) {
+                if (info.addUpStat > cardList[i].addUpStat && info.scoreUp.default >= scoreUpMaxValue)
+                    cnt += 1
+            }
+            if (cnt >= 5 * charts.length)
+                abortSet |= 1 << i
+        }
+        // console.log(cardList.map(info => info.stat))
+        // console.log(cardList.map(info => info.scoreUp.default))
+        // console.log(abortSet)
+
+        const tmpTeamList = teamList.filter(info => (info.set & abortSet) == 0)
+
+        for (const info of tmpTeamList) {
+            info.calcStat()
+            info.score = charts.map((chart, i) => {
+                const score = chart.getScore([...info.order[i], info.capital[i]], info.scoreUp[i], Math.floor(info.stat))
+                if (maxScore[i] < score)
+                    maxScore[i] = score
+                return score
+            })
+        }
+
+        const ed = Date.now()
+        // time1 += ed - st
+        maxScore.push(0)
+        for (var i = charts.length - 1; i >= 0; i -= 1) {
+            maxScore[i] += maxScore[i + 1]
+        }
+
+        console.log('cur max score =', data.totalScore, "maxScore =", maxScore[0])
+        if (maxScore[0] <= data.totalScore) {
+            console.log("skip", magazine, bandId, attribute)
+            return
+        }
+
+        tmpTeamList.sort((a, b) => {
+            return b.score.at(-1) - a.score.at(-1)
+        })
+        // console.log(tmpTeamList.length)
+        var cnt = 0
+        function dfs(depth: number = 0, Set: number = 0, sumScore: number = 0, teamList: Array<teamInfo> = []) {
+            if (depth == 1) {
+                const timeNow = Date.now()
+                if (timeNow - timeStart > 1200000) {
+                    throw new Error()
+                }
+            }
+            if (depth == charts.length) {
+                // console.log(sumScore)
+                if (sumScore > data.totalScore) {
+                    cnt += 1
+                    const result = {
+                        totalScore: 0,
+                        totalStat: 0,
+                        score: [],
+                        stat: [],
+                        team: [],
+                        capital: [],
+                        item: {}
+                    }
+                    for (var i = 0; i < charts.length; i += 1) {
+                        const info: teamInfo = teamList[i]
+                        result.totalStat += info.stat
+                        result.score.push(info.score[i])
+                        result.stat.push(Math.floor(info.stat))
+                        result.team.push(info.order[i])
+                        result.capital.push(info.capital[i])
+                        // console.log(info.scoreUp[i])
+                    }
+                    result.totalStat = Math.floor(result.totalStat)
+                    result.totalScore = sumScore
+                    result.item[AreaItemType.band] = bandId
+                    result.item[AreaItemType.attribute] = attribute
+                    result.item[AreaItemType.magazine] = magazine
+                    data = result
+                }
+                return
+            }
+            for (const info of tmpTeamList) {
+                if (Set & info.set) {
+                    continue
+                }
+                if (sumScore + info.score[depth] + maxScore[depth + 1] <= data.totalScore) {
+                    continue
+                }
+                // 把剩下的歌曲按照除当前已选队伍外的最高综合力 X 最大可能歌曲技能加成 作为上限
+                let maxScore2 = 0
+                var maxScoreRates = maxScoreRate.slice(depth + 1)
+                maxScoreRates.sort().reverse()
+                let teamCount = 0, teamStat = 0
+                for (var card of cardListStat) {
+                    if (card.set & info.set || card.set & Set) {
                         continue
                     }
+                    teamCount += 1
+                    teamStat += card.stat
+                    if (teamCount == 5) {
+                        var scoreRate = maxScoreRates.pop()
+                        maxScore2 += Math.floor(scoreRate * teamStat)
+                        if (maxScoreRates.length == 0) {
+                            break;
+                        }
+                        teamCount = 0
+                        teamStat = 0
+                    }
+                }
+                if (sumScore + info.score[depth] + maxScore2 <= data.totalScore) {
+                    // console.log("maxScore2 =", maxScore2, 'data.totalScore =', data.totalScore, 'continue.')
+                    continue
+                }
+                teamList.push(info)
+                dfs(depth + 1, Set | info.set, sumScore + info.score[depth], teamList)
+                teamList.pop()
+                // 我感觉这里不能剪枝？
+                // if (depth == charts.length - 1) {
+                //     break
+                // }
+            }
+        }
+        // const st2 = Date.now()
+        dfs()
+        // console.log(cnt)
+        // const ed2 = Date.now()
+        // time2 += ed2 - st2
+    }
 
-                    let cnt = 0, scoreUpMaxValue = list[i].scoreUp.unificationActivateEffectValue || list[i].scoreUp.default
-                    for (const info of list) {
-                        if (info.addUpStat > list[i].addUpStat && info.scoreUp.default >= scoreUpMaxValue)
-                            cnt += 1
-                    }
-                    if (cnt >= 5 * charts.length)
-                        abortSet |= 1 << i
+    main_process(bestTeamMagazine, bestTeamBandId, bestTeamAttribute)
+    for (var magazine in areaItem[AreaItemType.magazine]) {
+        for (var bandId in areaItem[AreaItemType.band]) {
+            for (var attribute in areaItem[AreaItemType.attribute]) {
+                if (magazine == bestTeamMagazine && bandId == bestTeamBandId && attribute == bestTeamAttribute) {
+                    continue
                 }
-                // console.log(list.map(info => info.stat))
-                // console.log(list.map(info => info.scoreUp.default))
-                // console.log(abortSet)
-
-                const tmpTeamList = teamList.filter(info => (info.set & abortSet) == 0)
-                const ed = Date.now()
-                // time1 += ed - st
-                maxScore.push(0)
-                for (var i = charts.length - 1; i >= 0; i -= 1) {
-                    maxScore[i] += maxScore[i + 1]
-                }
-                tmpTeamList.sort((a, b) => {
-                    return b.score.at(-1) - a.score.at(-1)
-                })
-                // console.log(tmpTeamList.length)
-                var cnt = 0
-                function dfs(depth: number = 0, Set: number = 0, sumScore: number = 0, list: Array<teamInfo> = []) {
-                    if (depth == 1) {
-                        const timeNow = Date.now()
-                        if (timeNow - timeStart > 120000) {
-                            throw new Error()
-                        }
-                    }
-                    if (depth == charts.length) {
-                        // console.log(sumScore)
-                        if (sumScore > data.totalScore) {
-                            cnt += 1
-                            const result = {
-                                totalScore: 0,
-                                totalStat: 0,
-                                score: [],
-                                stat: [],
-                                team: [],
-                                capital: [],
-                                item: {}
-                            }
-                            for (var i = 0; i < charts.length; i += 1) {
-                                const info: teamInfo = list[i]
-                                result.totalStat += info.stat
-                                result.score.push(info.score[i])
-                                result.stat.push(Math.floor(info.stat))
-                                result.team.push(info.order[i])
-                                result.capital.push(info.capital[i])
-                                // console.log(info.scoreUp[i])
-                            }
-                            result.totalStat = Math.floor(result.totalStat)
-                            result.totalScore = sumScore
-                            result.item[AreaItemType.band] = bandId
-                            result.item[AreaItemType.attribute] = attribute
-                            result.item[AreaItemType.magazine] = magazine
-                            data = result
-                        }
-                        return
-                    }
-                    for (const info of tmpTeamList) {
-                        if (Set & info.set) {
-                            continue
-                        }
-                        if (sumScore + info.score[depth] + maxScore[depth + 1] > data.totalScore) {
-                            list.push(info)
-                            dfs(depth + 1, Set | info.set, sumScore + info.score[depth], list)
-                            list.pop()
-                        }
-                        if (depth == charts.length - 1) {
-                            break
-                        }
-                    }
-                }
-                // const st2 = Date.now()
-                dfs()
-                // console.log(cnt)
-                // const ed2 = Date.now()
-                // time2 += ed2 - st2
+                main_process(magazine, bandId, attribute)
             }
         }
     }

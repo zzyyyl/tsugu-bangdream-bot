@@ -428,7 +428,7 @@ export class Chart {
         capital: cardInfo,
         scoreUp: Array<number>
     } {
-        const dp = new Array<number>(1 << 5).fill(0), choose = new Array<number>(1 << 5).fill(0)
+        const dp = new Array<number>(1 << 5).fill(0), choose = new Array<number>(1 << 5).fill(0);
         dp[0] = this.meta.noSkill
         for (var i = 0; i < 1 << 5; i += 1) {
             var k = 0
